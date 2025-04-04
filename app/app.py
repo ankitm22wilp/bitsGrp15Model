@@ -3,8 +3,14 @@ import pickle
 import numpy as np
 import pandas as pd
 
-# Load the trained model
-model = pickle.load(open("trains_delay_prediction_model.pkl", "rb"))
+# Getting the absolute path to the directory containing app.py
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Creating full path to the model file
+MODEL_PATH = os.path.join(APP_DIR, "trains_delay_prediction_model.pkl")
+
+# Load the model using the full path
+model = pickle.load(open(MODEL_PATH, "rb"))
 
 st.set_page_config(page_title="Train Delay Predictor", layout="centered")
 st.title("🚉 Train Delay Prediction")
