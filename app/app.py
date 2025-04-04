@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 # Load the trained model
-model = pickle.load(open("trains_delay_prediction_model.pkl", "rb"))
+model = pickle.load(open("app/trains_delay_prediction_model.pkl", "rb"))
 
 st.set_page_config(page_title="Train Delay Predictor", layout="centered")
 st.title("🚉 Train Delay Prediction")
