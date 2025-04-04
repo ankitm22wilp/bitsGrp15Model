@@ -2,6 +2,7 @@ import streamlit as st
 import pickle
 import numpy as np
 import pandas as pd
+import os
 
 # Getting the absolute path to the directory containing app.py
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
