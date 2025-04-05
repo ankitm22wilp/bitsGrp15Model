@@ -2,17 +2,25 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
+import os
 from datetime import datetime
 from TrainDelayPrediction import preprocess_input
 
 # Load trained model, label encoder, and input column order
-with open("trains_delay_prediction_model.pkl", "rb") as f:
+import os
+import pickle
+
+# Get absolute path of the current file's directory
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Use absolute paths to load model and encoders
+with open(os.path.join(BASE_DIR, "trains_delay_prediction_model.pkl"), "rb") as f:
     model = pickle.load(f)
 
-with open("label_encoder.pkl", "rb") as f:
+with open(os.path.join(BASE_DIR, "label_encoder.pkl"), "rb") as f:
     label_encoder = pickle.load(f)
 
-with open("model_input_columns.pkl", "rb") as f:
+with open(os.path.join(BASE_DIR, "model_input_columns.pkl"), "rb") as f:
     model_columns = pickle.load(f)
 
 # Terrain options (should match what was used during training)
