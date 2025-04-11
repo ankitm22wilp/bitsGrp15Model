@@ -7,8 +7,8 @@ from datetime import datetime
 from TrainDelayPrediction import preprocess_input
 
 # Set base directory to current working directory (important for relative paths)
-BASE_DIR = os.getcwd()
-st.write("📁 Current BASE_DIR:", BASE_DIR)  # Debug line to verify path resolution
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+#st.write("📁 Current BASE_DIR:", BASE_DIR)  # Debug line to verify path resolution
 
 # Load shared label encoder
 with open(os.path.join(BASE_DIR, "label_encoder.pkl"), "rb") as f:
