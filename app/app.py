@@ -103,8 +103,10 @@ if submitted:
             processed = imputer.transform(processed)
 
         # Predict
-        prediction_encoded = model.predict(processed)[0]
-        prediction_label = label_encoder.inverse_transform([prediction_encoded])[0]
+        prediction = model.predict(processed)[0]
+
+        # Small fix to support both encoded and string-based model outputs
+        prediction_label = prediction if isinstance(prediction, str) else label_encoder.inverse_transform([prediction])[0]
 
         st.success(f"📊 Predicted Delay Category using **{selected_model_name}**: **{prediction_label}**")
 

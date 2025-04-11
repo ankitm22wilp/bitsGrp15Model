@@ -1,6 +1,6 @@
 import pandas as pd
 
-def preprocess_input(df):
+def preprocess_input(df, skip_target_in_training=False):
     df = df.copy()
 
     # Encode binary features if present
@@ -9,19 +9,66 @@ def preprocess_input(df):
     else:
         df['Is Pantry Available'] = 0
 
-    # Encode Type
+    # Encode Type safely
     df['Type'] = df['Type'].astype('category').cat.codes if 'Type' in df.columns else 0
 
-    # Encode Zone
+    # Encode Zone safely
     df['Zone'] = df['Zone'].astype('category').cat.codes if 'Zone' in df.columns else 0
 
     # Encode Classes
-    if 'Classes' in df.columns:
-        df['Classes'] = df['Classes'].fillna('').apply(lambda x: len(x.split(',')) if isinstance(x, str) else 0)
-    else:
-        df['Classes'] = 0
+    df['Classes'] = df['Classes'].fillna('').apply(lambda x: len(x.split(',')) if isinstance(x, str) else 0) if 'Classes' in df.columns else 0
 
-    # Encode Terrains
+    # Parse time safely with explicit format (assuming HH:MM format)
+    time_format = "%H:%M"
+
+    if 'Departure Time' in df.columns:
+        df['Departure Time Parsed'] = pd.to_datetime(df['Departure Time'], format=time_format, errors='coerce')
+        df['Departure_Hour'] = df['Departure Time Parsed'].dt.hour.fillna(0).astype(int)
+        df['Departure_Minute'] = df['Departure Time Parsed'].dt.minute.fillna(0).astype(int)
+        df.drop(columns=['Departure Time Parsed'], inplace=True)
+    else:
+        df['Departure_Hour'] = 0
+        df['Departure_Minute'] = 0
+
+    if 'Arrival Time' in df.columns:
+        df['Arrival Time Parsed'] = pd.to_datetime(df['Arrival Time'], format=time_format, errors='coerce')
+        df['Arrival_Hour'] = df['Arrival Time Parsed'].dt.hour.fillna(0).astype(int)
+        df['Arrival_Minute'] = df['Arrival Time Parsed'].dt.minute.fillna(0).astype(int)
+        df.drop(columns=['Arrival Time Parsed'], inplace=True)
+    else:
+        df['Arrival_Hour'] = 0
+        df['Arrival_Minute'] = 0
+
+    # Calculate Travel Time (minutes)
+    if 'Arrival Time' in df.columns and 'Departure Time' in df.columns:
+        try:
+            arrival = pd.to_datetime(df['Arrival Time'], format=time_format, errors='coerce')
+            departure = pd.to_datetime(df['Departure Time'], format=time_format, errors='coerce')
+            travel_time = (arrival - departure).dt.total_seconds() / 60.0
+            df['Travel Time'] = travel_time.fillna(travel_time.mean())
+        except:
+            df['Travel Time'] = 0
+    else:
+        df['Travel Time'] = 0
+
+    # Day of week
+    df['Day_of_Week'] = pd.to_datetime(df['Date'], errors='coerce').dt.weekday if 'Date' in df.columns else 0
+
+    # Month encoding
+    df['Month'] = pd.to_datetime(df['Date'], errors='coerce').dt.month_name() if 'Date' in df.columns else 'January'
+
+    months = ['January', 'February', 'March', 'April', 'May', 'June',
+              'July', 'August', 'September', 'October', 'November', 'December']
+
+    for m in months:
+        df[f'{m}_Average'] = df['Month'].apply(lambda x: 5.0 if x == m else 0.0)
+        df[f'{m}_Max'] = df['Month'].apply(lambda x: 10.0 if x == m else 0.0)
+        df[f'{m}_Min'] = df['Month'].apply(lambda x: 2.0 if x == m else 0.0)
+        df[f'{m}_Class'] = df['Month'].apply(lambda x: 1 if x == m else 0)
+
+    # Number of Days based on "Days of Run"
+    df['Number of Days'] = df['Days of Run'].apply(lambda x: len(str(x).split(',')) if pd.notnull(x) else 0) if 'Days of Run' in df.columns else 0
+    
     # Encode Terrain (multi-select as comma-separated string)
     if 'Terrain' in df.columns:
         from sklearn.preprocessing import MultiLabelBinarizer
@@ -31,53 +78,37 @@ def preprocess_input(df):
         terrain_encoded = pd.DataFrame(mlb.fit_transform(terrain_lists), columns=mlb.classes_, index=df.index)
         df = pd.concat([df.drop(columns=['Terrain']), terrain_encoded], axis=1)
     else:
-        pass  # Handle later during inference	
+        pass  # Handle later during inference
 
-    # Travel Time
-    if 'Arrival Time' in df.columns and 'Departure Time' in df.columns:
-        arr = pd.to_datetime(df['Arrival Time'], errors='coerce')
-        dep = pd.to_datetime(df['Departure Time'], errors='coerce')
-        df['Travel Time'] = (arr - dep).dt.total_seconds() / 60.0
-    df['Travel Time'] = df.get('Travel Time', pd.Series(0)).fillna(0)
+    # Drop unwanted columns
+    drop_cols = ['Train Name', 'Date', 'Departure Time', 'Arrival Time', 'Month',
+                 'Origin', 'Destination', 'Days of Run']
+    df.drop(columns=[col for col in drop_cols if col in df.columns], inplace=True)
 
-    # Day of week
-    if 'Date' in df.columns:
-        df['Day_of_Week'] = pd.to_datetime(df['Date'], errors='coerce').dt.weekday
+    # Drop non-numeric columns if any
+    for col in df.columns:
+        if df[col].dtype == 'object':
+            #print(f"Dropping non-numeric column: {col}")
+            df.drop(columns=[col], inplace=True)
+
+    # Compute Delay Category from Average Mode Delay
+    if skip_target_in_training and 'Average Mode Delay' in df.columns:
+        def categorize_delay(delay):
+            if pd.isna(delay):
+                return 'Unknown'
+            elif delay == 0:
+                return 'No Delay'
+            elif delay <= 10:
+                return 'Low'
+            elif delay <= 30:
+                return 'Medium'
+            elif delay <= 60:
+                return 'High'
+            else:
+                return 'Very High'
+        
+        df['Delay Category'] = df['Average Mode Delay'].apply(categorize_delay)
     else:
-        df['Day_of_Week'] = 0
-
-    # Departure and arrival hour/minute
-    df['Departure_Hour'] = pd.to_datetime(df.get('Departure Time'), errors='coerce').dt.hour.fillna(0).astype(int)
-    df['Departure_Minute'] = pd.to_datetime(df.get('Departure Time'), errors='coerce').dt.minute.fillna(0).astype(int)
-    df['Arrival_Hour'] = pd.to_datetime(df.get('Arrival Time'), errors='coerce').dt.hour.fillna(0).astype(int)
-    df['Arrival_Minute'] = pd.to_datetime(df.get('Arrival Time'), errors='coerce').dt.minute.fillna(0).astype(int)
-
-    # Monthly encoding
-    if 'Date' in df.columns:
-        df['Month'] = pd.to_datetime(df['Date'], errors='coerce').dt.month_name()
-    else:
-        df['Month'] = 'January'
-
-    for m in ['January', 'February', 'March', 'April', 'May', 'June',
-              'July', 'August', 'September', 'October', 'November', 'December']:
-        df[f'{m}_Average'] = df['Month'].apply(lambda x: 5.0 if x == m else 0.0)
-        df[f'{m}_Max'] = df['Month'].apply(lambda x: 10.0 if x == m else 0.0)
-        df[f'{m}_Min'] = df['Month'].apply(lambda x: 2.0 if x == m else 0.0)
-        df[f'{m}_Class'] = df['Month'].apply(lambda x: 1 if x == m else 0)
-
-    # Number of Days
-    if 'Days of Run' in df.columns:
-        df['Number of Days'] = df['Days of Run'].apply(lambda x: len(str(x).split(',')) if pd.notnull(x) else 0)
-    else:
-        df['Number of Days'] = 0
-
-    # Drop unnecessary columns
-    drop_cols = ['Train Name', 'Date', 'Departure Time', 'Arrival Time', 'Month', 'Origin', 'Destination', 'Days of Run']
-    df = df.drop(columns=[col for col in drop_cols if col in df.columns])
-
-    # Drop non-numeric columns
-    for col in df.select_dtypes(include=['object']).columns:
-        df = df.drop(columns=[col])
+        df['Delay Category'] = 'Unknown'
 
     return df
-
