@@ -6,8 +6,11 @@ import os
 from datetime import datetime
 from TrainDelayPrediction import preprocess_input
 
-# Fix: Use current working directory (safe for local + Streamlit Cloud)
-BASE_DIR = os.getcwd()
+# ✅ Path fix: works both locally and on Streamlit Cloud
+if os.path.exists("label_encoder.pkl"):
+    BASE_DIR = os.getcwd()
+else:
+    BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 # Load shared label encoder
 with open(os.path.join(BASE_DIR, "label_encoder.pkl"), "rb") as f:
